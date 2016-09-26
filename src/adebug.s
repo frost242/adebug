@@ -152,33 +152,34 @@ german_text	EQU	0
 ;	 #] Text language equs:
 ;	 #[ Internal versions equs:
 in_line_asm	EQU	1
-			IFND	residant
-residant		EQU	0
-			ENDC
+	IFND	residant
+residant	EQU	0
+	ENDC
 residant_debug	EQU	0
 accessoire	EQU	0
-bridos		EQU	0
-cartouche		EQU	0
-mmanager		EQU	0
+bridos	EQU	0	; version brid‚e ? On supprimera plus tard
+cartouche	EQU	0
+mmanager	EQU	0
 diagnostic	EQU	0
 switching_debug	EQU	0
 sourcedebug	EQU	1
 turbodebug	EQU	1
-bsddebug		EQU	0
+bsddebug	EQU	0
 latticedebug	EQU	0
 laserdebug	EQU	0
-stmag		EQU	0
+stmag	EQU	0
+
 amigarevue	EQU	0
 daniel_version	EQU	0
 amiga_avbl	EQU	0
 atarifrance	EQU	0
-catchgen		EQU	0
+catchgen	EQU	0
 
-;	IFNE	residant|bridos|accessoire|stmag	;|cartouche
-;debug	EQU	0
-;	ELSEIF
-;debug	EQU	1
-;	ENDC
+	IFNE	residant|bridos|accessoire|stmag	;|cartouche
+debug	EQU	0
+	ELSEIF
+debug	EQU	1
+	ENDC
 
 	IFNE	english_text
 
@@ -278,6 +279,7 @@ ATARIST	EQU	1
 ATARITT	EQU	1
 ATARI	EQU	1
 MTOS	EQU	1	;pas en meme temps que cartouche
+
 AMIGA	EQU	0
 A3000	EQU	0
 MAC	EQU	0
@@ -299,13 +301,20 @@ _MSTE	EQU	12	;Atari Mega STe
 ;	 #[ Microproc equs:
 _68000	EQU	1
 _68010	EQU	0
-_68020	EQU	0
+_68020	EQU	1
 	IFNE	ATARITT|A3000
 _68030	EQU	1
 	ELSEIF
 _68030	EQU	0
 	ENDC	; d'ATARITT
+	IFNE	_68030
+_68040	EQU	1
+_68060	EQU	1
+	ELSEIF
 _68040	EQU	0
+_68060	EQU	0
+	ENDC	; 68030, pour activer le support du 060
+
 _CPU32	EQU	0
 ;	IFNE	_68030
 ;	IFEQ	A3000
@@ -626,6 +635,10 @@ _30	MACRO
 	opt	p=68030,p=68882
 	ENDM
 
+_40	MACRO
+	opt	p=68040,p=68882
+	ENDM
+
 	ENDC	;d'ATARI|AMIGA
 
 	IFNE	MAC
@@ -802,6 +815,9 @@ not_reserved:
 	ENDC	;ATARIST
 ;--------------- USER
 	bsr	check_chip
+	; check CPU type.
+	; if Adebug compiled only for 030 and up
+	; and if CPU is < 030, then aborts
 	IFEQ	_68000
 	tst.b	chip_type(a6)
 	bne.s	.no_bleme
@@ -850,7 +866,8 @@ not_reserved:
 	movec	vbr,d0
 	_00
 	move.l	d0,initial_vbr(a6)
-.68000:	ENDC	;_68030
+.68000:
+	ENDC	;_68030
 	IFNE	AMIGA
 	move.l	internal_am_ssp(a6),a0
 	jsr	super_off
@@ -1035,6 +1052,10 @@ check_chip:
  dc.w $f4d0				; cinva
  moveq #4,d0
  nop
+ dc.w	%0100111001111010		; movec	pcr,d0
+ dc.w	$0808
+ moveq	#6,d0	; detects a 68060
+ nop
 .end_CPU:
  move.b d0,chip_type(a6)
  moveq #0,d0
@@ -1050,17 +1071,18 @@ check_chip:
  moveq #2,d0
  cmp.w #$1f38,(sp)			; 68882 Stack Frame
  beq.s .end_FPU
- moveq #3,d0
+ moveq #3,d0	; verify 060 stack frame (type 3 on 060)
 .end_FPU:
  dc.w $f35f				; frestore (sp)+
 .no_FPU:
  move.b d0,fpu_type(a6)
  move.b d0,fpu_disassembly(a6)
+;	IFNE	_68040
 ; moveq #0,d0
 ; lea .68040_MMU(pc),a0
 ; move.l a0,$2c(a2)
 ; dc.w $f000,$2400			; pflusha (68851, 68030)
-; move.w Chip_type(a6),d0
+; move.w chip_type(a6),d0
 ; bra.s .end_MMU
 ;.68040_MMU:
 ; lea .end_MMU(pc),a0
@@ -1068,7 +1090,8 @@ check_chip:
 ; dc.w $f518				; pflusha (68040)
 ; moveq #3,d0
 ;.end_MMU:
-; move.w d0,MMU_type(a6)
+; move.w d0,mmu_type(a6)
+;	ENDC	; _68040
  move.l d3,$38(a2)
  move.l d2,$2c(a2)
  sub.l a2,a2

@@ -1,4 +1,4 @@
-;
+
 ; Copyright 1990-2006 Alexandre Lemaresquier, Raphael Lemoine
 ;                     Laurent Chemla (Serial support), Daniel Verite (AmigaOS support)
 ;
@@ -115,7 +115,7 @@ vsetimode:
 	bsr	vgetmode			;get cur mode
 	move.w	d0,d3
 	move.w	internal_rez(a6),-(sp)
-	move.w	#$5b,-(sp)
+	move.w	#$5bb,-(sp)
 	trap	#14			;vgetsize
 	addq.w	#4,sp
 	add.l	#1024,d0
@@ -2425,24 +2425,39 @@ p1_registers_init:
 	move.l	d0,cacr_buf(a6)
 	movec	vbr,d0
 	move.l	d0,vbr_buf(a6)
+; UGLY HACK by frost
+	IFEQ	_68060
 	movec	caar,d0
 	move.l	d0,caar_buf(a6)
 	movec	msp,d0
 	move.l	d0,msp_buf(a6)
 ;	movec	isp,d0
 ;	move.l	d0,isp_buf(a6)
+	ENDC
 	lea	crp_buf(a6),a0
+	IFEQ	_68060
 	dc.w	$f010,$4e00	;pmove.d	crp,(a0)
+	ENDC
 	addq.w	#8,a0
+	IFEQ	_68060
 	dc.w	$f010,$4e00	;pmove.d	crp,(a0)	;pour l'instant crp->srp
+	ENDC
 	addq.w	#8,a0
+	IFEQ	_68060
 	dc.w	$f010,$4200	;pmove.l	tc,(a0)
+	ENDC
 	addq.w	#4,a0
+	IFEQ	_68060
 	dc.w	$f010,$0a00	;pmove.l	tt0,(a0)
+	ENDC
 	addq.w	#4,a0
+	IFEQ	_68060
 	dc.w	$f010,$0e00	;pmove.l	tt1,(a0)
+	ENDC
 	addq.w	#4,a0
+	IFEQ	_68060
 	dc.w	$f010,$6200	;pmove.w	mmusr,(a0)
+	ENDC
 	tst.b	fpu_type(a6)
 	beq.s	.no_fpu
 	addq.w	#2,a0
@@ -5355,7 +5370,8 @@ set_system_break:
 	;@ de l'expression a evaluer
 	move.l	a5,a0
 	move.l	a4,a1
-	bsr	_set_break_eval
+	jsr	_set_break_eval
+	;bsr	_set_break_eval
 
 	;nø du break
 	move.w	d7,BREAK_NUMBER(a5)
@@ -5369,7 +5385,7 @@ set_system_break:
 	move.b	d6,d0
 	;@ de la routine de traitement des exceptions
 	lea	_trap_catch,a0
-	bsr	_build_breakpt_address
+	jsr	_build_breakpt_address
 
 	;d6=break vector
 	moveq	#-1,d1

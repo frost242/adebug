@@ -4048,6 +4048,7 @@ set_break:
 	_JMP	set_system_break
 	; #] Set break:
 	; #[ Test_on_break:
+; traitement des breaks conditionnels
 ;-IN-
 ;d7=break#
 ;d6=vector#
@@ -5152,6 +5153,7 @@ _restore_internal_context:
 	; #] Internal_breaks_access:
 	; #[ Exceptions stuff:
 		;#[ Put exceptions:
+; this routine sets up every "internal" exceptions handlers.
 put_exceptions:
 	IFNE	ATARIST
 	moveq	#-1,d0
@@ -5169,6 +5171,7 @@ put_exceptions:
 	tst.b	chip_type(a6)	;catch linef on 68xxx
 	beq.s	.68000
 	move.w	#$2c,exceptions_caught_buffer+11*4+2(a6)
+
 .68000:
 	ENDC	;_68030
 	ENDC	;ATARIST
@@ -5195,6 +5198,12 @@ put_exceptions:
 ;d0=# d'exception
 ;-- Out --
 ;d0=reussite
+;
+; takes exception number in d0, then sets up the pointer to the according
+; exception handler.
+; a generic routine "breakpt" handles the exceptions, see later in code.
+; Exception entry routine is stored in "exceptions_caught_buffer", only a
+; branch forest which provides exception number to "breakpt".
 put_exception:
 	movem.l	a2-a3,-(sp)
 	lea	breakpt(pc),a1	;@ de la routine de traitement des exceptions
@@ -5304,7 +5313,10 @@ reput_exception:
 	IFNE	_68030
 	tst.b	chip_type(a6)
 	beq.s	.68000
-	dc.l	$4e7a1801		;movec	vbr,d1
+	_20
+	movec	vbr,d1
+;	dc.l	$4e7a1801		;movec	vbr,d1
+	_00
 	add.l	d1,a1
 .68000:
 	ENDC
@@ -5573,6 +5585,9 @@ get_instr_type:
 ;a6 is fixed
 ;d7=p1 ssp
 ;d0/a0-a1=temporary
+;
+; generic exception handling routine
+
 	SET_ID	EXCEPTION_MAGIC
 breakpt:
 	IFEQ	switching_debug
@@ -5635,6 +5650,7 @@ breakpt:
 .analyse:
 	moveq	#0,d0
 	move.b	exception(a6),d0
+
 	IFNE	AMIGA
 ;cas special de la violation de privilege
 	cmp.b	#8,d0
@@ -5652,7 +5668,7 @@ breakpt:
 	beq.s	._68000
 	clr.w	-(sp)
 ._68000:
-	ENDC
+	ENDC	; 68020!68030
 	move.l	a1,-(sp)	; @ retour
 	move.w	4(sp),d0
 	or.w	#$2000,d0
@@ -5691,6 +5707,7 @@ breakpt:
 	bra	.nothing
 .no_amiga_stop:
 	ENDC	;d'AMIGA
+
 	cmp.b	#-2,d0	;uninitialized context
 	beq	.nothing
 	cmp.b	#-1,d0	;reset
@@ -5775,9 +5792,9 @@ breakpt:
 	movem.l	tmp_context_buffer(a6),d0-a5
 	RESTOREA6
 ;	ori.w	#$8000,(sp)
-	bset	#7,(sp)
+	bset	#7,(sp)	; set trace
 	IFNE	_68030
-	bclr	#6,(sp)
+	bclr	#6,(sp)	; for 030/040 CPU -> trace on any instructions
 	ENDC	; de _68030
 	rte
 .super:
@@ -5822,7 +5839,7 @@ breakpt:
 .more_nothing:
 	move.l	d7,sp
 	movem.l	tmp_context_buffer(a6),d0-a5
-	bra	p1p0
+	bra	p1p0	; from User prog to Adebug
 
 	; #] Breakpt:
 	; #[ Write_baderr:
@@ -5967,8 +5984,14 @@ p0p1_checks:
 	rts
 	; #] p0p1_checks:
 	; #[ p0p1:
+;
 ;pas de parametres formels
-p0p1:
+p0p1:		; - from adebug to user prog
+;
+; This rout goes from Adebug to User program
+;   p1p0 does the contrary.
+;
+
 	IFNE	AMIGA
 	bsr	test_task
 	bpl.s	.task_ok
@@ -6208,34 +6231,60 @@ p0p1:
 	bsr	reactive_task
 	ENDC	;d'AMIGA
 	move.l	sp,internal_ssp(a6)
+;	LIST
 	IFNE	_68030
 	tst.b	chip_type(a6)
 	beq	.68000
-	_30
+; bug, for template...
+;	cmp.b	#6,chip_type(a6)
+;	beq	.68060
+	_30	; macro = opt p=68030,p=68882...
 	move.w	sfc_buf(a6),d0
 	dc.l	$4e7b0000		;movec	d0,sfc
 	move.w	dfc_buf(a6),d0
 	dc.l	$4e7b0001		;movec	d0,dfc
 	move.l	cacr_buf(a6),d0
-	dc.l	$4e7b0002		;movec	d0,cacr
+	movec	d0,cacr
+	IFEQ	_68060
+	nop
+	cpusha	dc	; flush data cache
+	cinva	bc	; inv inst cache & branch cache
+	nop
+	ENDC
+;	cmp.b	#6,chip_type(a6)
+;	beq	.nocacr_68060
+	movec	d0,cacr
+;	dc.l	$4e7b0002		;movec	d0,cacr
+;.nocacr_68060
 	move.l	vbr_buf(a6),d0
 	dc.l	$4e7b0801		;movec	d0,vbr
+
+	cmp.b	#6,chip_type(a6)
+	beq	.nocaar_68060
 	move.l	caar_buf(a6),d0
 	dc.l	$4e7b0802		;movec	d0,caar
+.nocaar_68060
 	move.l	ssp_buf(a6),d4
+
+; badly handled as the 060 the the M bit but does not have
+; both isp and msp registers, just ssp
+	cmp.b	#6,chip_type(a6)
+	beq	.afterm	; skips the isp/msp stuff if 060
+	move	d4,sp
 	btst	#12,d3		;bit M?
 	bne.s	.m
 	movec	d4,isp
-;	dc.l	$4e7b0804		;movec	d0,isp
+	dc.l	$4e7b0804		;movec	d0,isp
 	move.l	msp_buf(a6),d0
 	dc.l	$4e7b0803		;movec	d0,msp
 	bra.s	.afterm
 
-.m:	movec	d4,msp
-;	dc.l	$4e7b0803		;movec	d0,msp
+.m:
+	movec	d4,msp
+	dc.l	$4e7b0803		;movec	d0,msp
 	move.l	isp_buf(a6),d0
 	dc.l	$4e7b0804		;movec	d0,isp
-;	ori.w	#$1000,sr		;set M bit
+	ori.w	#$1000,sr		;set M bit
 
 .afterm:	_JSR	get_vbr
 	move.l	$e0(a0),d2
@@ -6243,23 +6292,38 @@ p0p1:
 	move.l	a1,$e0(a0)
 	moveq	#0,d1
 	lea	crp_buf(a6),a0
+
+	cmp.b	#6,chip_type(a6)
+	beq	.skip_68060
+
 	dc.w	$f010,$4c00	;pmove.q	(a0),crp
 	addq.w	#8,a0
 	dc.w	$f010,$4800	;pmove.q	(a0),srp
 	addq.w	#8,a0
 	dc.w	$f010,$4000	;pmove.l	(a0),tc
 	addq.w	#4,a0
-	dc.w	$f010,$0800	;pmove.l	(a0),tt0
+	dc.w	$f010,$0800	;	pmove.l	(a0),tt0
 	addq.w	#4,a0
 	dc.w	$f010,$0c00	;pmove.l	(a0),tt1
 	addq.w	#4,a0
 	dc.w	$f010,$6000	;pmove.w	(a0),mmusr
+	bra.s	.no_060
+.skip_68060
+	lea	8+8+4+4+4(a0),a0	; corrects a0, just in case
+.no_060
+
 	tst.b	d1
 	bne	.pmmu_error
 	tst.b	fpu_type(a6)
+
+; TODO: review FPU stack frame handling
+; Warning: FPU stack frame differs from 040 to 060
+;	bra.s	.no_fpu
+
 	beq.s	.no_fpu
 	addq.w	#2,a0
 ;	trap	#0
+
 	dc.w	$f210,$d0ff	;fmovem.x	(a0),fp0-fp7
 	lea	8*3*4(a0),a0
 ;	dc.w	$f210,$dc00	;fmovem.l	(a0),fpcr/fpsr/fpiar
@@ -6293,10 +6357,11 @@ p0p1:
 	clr.w	sf_type(a6)
 	bra.s	.do_rte
 .68000:
-	ENDIF	;68030
+	ENDC	;68030
+
 	move.l	ssp_buf(a6),sp
 .do_rte:	move.l	pc_buf(a6),-(sp)
-	move.w	d3,-(sp)
+	move.w	d3,-(sp)	; d3 seems to contain SR
 	move.l	a7_buf(a6),a0
 	move.l	a0,usp
 	move.b	#1,p_number(a6)
@@ -6320,6 +6385,9 @@ p0_pmmu_routine:
 	; #] p0p1:
 	; #[ p1p0:
 p1p0:
+; From User program to Adebug
+;   you go here when you come from the "breakpt" routine.
+
 	move.b	p_number(a6),old_p_number(a6)
 	sf	p_number(a6)
 	sf	halted_flag(a6)
@@ -6371,19 +6439,42 @@ p1p0:
 	move.w	d0,sfc_buf(a6)
 	dc.l	$4e7a0001		;movec	dfc,d0
 	move.w	d0,dfc_buf(a6)
+	cmp.b	#6,chip_type(a6)
+	beq	.no_cacr
 	dc.l	$4e7a0002		;movec	cacr,d0
+.no_cacr
+	movec	cacr,d0
 	move.l	d0,cacr_buf(a6)
+
+	cmp.b	#6,chip_type(a6)
+	beq	.68060
+
 	move.l	#$819,d0
 	movec	d0,cacr		;CD?,IBE,CI,EI
+	bra.s	.next
+.68060
+	nop
+	_40
+	cpusha	dc	; push data cache
+	cinva	bc	; invalidates both cache & branche cache
+
+.next	
 	dc.l	$4e7a0801		;movec	vbr,d0
 	move.l	d0,vbr_buf(a6)
+
+	cmp.b	#6,chip_type(a6)
+	beq.s	.skip_caar_msp_isp_060
 	dc.l	$4e7a0802		;movec	caar,d0
 	move.l	d0,caar_buf(a6)
 	dc.l	$4e7a0803		;movec	msp,d0
 	move.l	d0,msp_buf(a6)
 	dc.l	$4e7a0804		;movec	isp,d0
 	move.l	d0,isp_buf(a6)
+.skip_caar_msp_isp_060
 	lea	crp_buf(a6),a0
+	cmp.b	#6,chip_type(a6)
+	beq	.skip_68060
+	_30
 	dc.w	$f010,$4e00	;pmove.q	crp,(a0)
 	addq.w	#8,a0
 	dc.w	$f010,$4a00	;pmove.q	srp,(a0)
@@ -6395,6 +6486,10 @@ p1p0:
 	pmove.l	tt1,(a0)		;dc.w	$f010,$0e00
 	addq.w	#4,a0
 	dc.w	$f010,$6200	;pmove.w	mmusr,(a0)
+	bra.s	.no_060
+.skip_68060
+	lea	8+8+4+4+4(a0),a0
+.no_060
 	tst.b	fpu_type(a6)
 	beq.s	.no_fpu
 	; detourner kekchose
