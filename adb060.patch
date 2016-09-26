@@ -1,0 +1,1091 @@
+diff -c /home/tom/Desktop/adb_2_13/src/accessor.s adb_2_14/src/accessor.s
+*** /home/tom/Desktop/adb_2_13/src/accessor.s	2007-01-17 12:02:54.000000000 +0100
+--- adb_2_14/src/accessor.s	2008-06-23 18:22:29.490141241 +0200
+***************
+*** 1,4 ****
+! ;
+  ; Copyright 1990-2006 Alexandre Lemaresquier, Raphael Lemoine
+  ;                     Laurent Chemla (Serial support), Daniel Verite (AmigaOS support)
+  ;
+--- 1,4 ----
+! 
+  ; Copyright 1990-2006 Alexandre Lemaresquier, Raphael Lemoine
+  ;                     Laurent Chemla (Serial support), Daniel Verite (AmigaOS support)
+  ;
+***************
+*** 136,142 ****
+  	bne.s	.non
+  	clr.l	(a1)
+  	move.l	6(a0),8(a0)	plus rien a lire!
+! 	st	evnt_multi_sem
+  	move.l	ksh_addr,a0
+  	sf	30(a0)		code repeat
+  	sf	31(a0)
+--- 136,142 ----
+  	bne.s	.non
+  	clr.l	(a1)
+  	move.l	6(a0),8(a0)	plus rien a lire!
+! 	st	evnt_multii_sem
+  	move.l	ksh_addr,a0
+  	sf	30(a0)		code repeat
+  	sf	31(a0)
+Seulement dans adb_2_14/src: adebug2.bak
+diff -c /home/tom/Desktop/adb_2_13/src/adebug2.s adb_2_14/src/adebug2.s
+*** /home/tom/Desktop/adb_2_13/src/adebug2.s	2007-01-17 12:03:04.000000000 +0100
+--- adb_2_14/src/adebug2.s	2008-06-23 18:22:12.746141420 +0200
+***************
+*** 4048,4053 ****
+--- 4048,4054 ----
+  	_JMP	set_system_break
+  	; #] Set break:
+  	; #[ Test_on_break:
++ ; traitement des breaks conditionnels
+  ;-IN-
+  ;d7=break#
+  ;d6=vector#
+***************
+*** 5152,5157 ****
+--- 5153,5159 ----
+  	; #] Internal_breaks_access:
+  	; #[ Exceptions stuff:
+  		;#[ Put exceptions:
++ ; this routine sets up every "internal" exceptions handlers.
+  put_exceptions:
+  	IFNE	ATARIST
+  	moveq	#-1,d0
+***************
+*** 5169,5174 ****
+--- 5171,5177 ----
+  	tst.b	chip_type(a6)	;catch linef on 68xxx
+  	beq.s	.68000
+  	move.w	#$2c,exceptions_caught_buffer+11*4+2(a6)
++ 
+  .68000:
+  	ENDC	;_68030
+  	ENDC	;ATARIST
+***************
+*** 5195,5200 ****
+--- 5198,5209 ----
+  ;d0=# d'exception
+  ;-- Out --
+  ;d0=reussite
++ ;
++ ; takes exception number in d0, then sets up the pointer to the according
++ ; exception handler.
++ ; a generic routine "breakpt" handles the exceptions, see later in code.
++ ; Exception entry routine is stored in "exceptions_caught_buffer", only a
++ ; branch forest which provides exception number to "breakpt".
+  put_exception:
+  	movem.l	a2-a3,-(sp)
+  	lea	breakpt(pc),a1	;@ de la routine de traitement des exceptions
+***************
+*** 5304,5310 ****
+  	IFNE	_68030
+  	tst.b	chip_type(a6)
+  	beq.s	.68000
+! 	dc.l	$4e7a1801		;movec	vbr,d1
+  	add.l	d1,a1
+  .68000:
+  	ENDC
+--- 5313,5322 ----
+  	IFNE	_68030
+  	tst.b	chip_type(a6)
+  	beq.s	.68000
+! 	_20
+! 	movec	vbr,d1
+! ;	dc.l	$4e7a1801		;movec	vbr,d1
+! 	_00
+  	add.l	d1,a1
+  .68000:
+  	ENDC
+***************
+*** 5573,5578 ****
+--- 5585,5593 ----
+  ;a6 is fixed
+  ;d7=p1 ssp
+  ;d0/a0-a1=temporary
++ ;
++ ; generic exception handling routine
++ 
+  	SET_ID	EXCEPTION_MAGIC
+  breakpt:
+  	IFEQ	switching_debug
+***************
+*** 5635,5640 ****
+--- 5650,5656 ----
+  .analyse:
+  	moveq	#0,d0
+  	move.b	exception(a6),d0
++ 
+  	IFNE	AMIGA
+  ;cas special de la violation de privilege
+  	cmp.b	#8,d0
+***************
+*** 5652,5658 ****
+  	beq.s	._68000
+  	clr.w	-(sp)
+  ._68000:
+! 	ENDC
+  	move.l	a1,-(sp)	; @ retour
+  	move.w	4(sp),d0
+  	or.w	#$2000,d0
+--- 5668,5674 ----
+  	beq.s	._68000
+  	clr.w	-(sp)
+  ._68000:
+! 	ENDC	; 68020!68030
+  	move.l	a1,-(sp)	; @ retour
+  	move.w	4(sp),d0
+  	or.w	#$2000,d0
+***************
+*** 5691,5696 ****
+--- 5707,5713 ----
+  	bra	.nothing
+  .no_amiga_stop:
+  	ENDC	;d'AMIGA
++ 
+  	cmp.b	#-2,d0	;uninitialized context
+  	beq	.nothing
+  	cmp.b	#-1,d0	;reset
+***************
+*** 5775,5783 ****
+  	movem.l	tmp_context_buffer(a6),d0-a5
+  	RESTOREA6
+  ;	ori.w	#$8000,(sp)
+! 	bset	#7,(sp)
+  	IFNE	_68030
+! 	bclr	#6,(sp)
+  	ENDC	; de _68030
+  	rte
+  .super:
+--- 5792,5800 ----
+  	movem.l	tmp_context_buffer(a6),d0-a5
+  	RESTOREA6
+  ;	ori.w	#$8000,(sp)
+! 	bset	#7,(sp)	; set trace
+  	IFNE	_68030
+! 	bclr	#6,(sp)	; for 030/040 CPU -> trace on any instructions
+  	ENDC	; de _68030
+  	rte
+  .super:
+***************
+*** 5822,5828 ****
+  .more_nothing:
+  	move.l	d7,sp
+  	movem.l	tmp_context_buffer(a6),d0-a5
+! 	bra	p1p0
+  
+  	; #] Breakpt:
+  	; #[ Write_baderr:
+--- 5839,5845 ----
+  .more_nothing:
+  	move.l	d7,sp
+  	movem.l	tmp_context_buffer(a6),d0-a5
+! 	bra	p1p0	; from User prog to Adebug
+  
+  	; #] Breakpt:
+  	; #[ Write_baderr:
+***************
+*** 5967,5974 ****
+  	rts
+  	; #] p0p1_checks:
+  	; #[ p0p1:
+  ;pas de parametres formels
+! p0p1:
+  	IFNE	AMIGA
+  	bsr	test_task
+  	bpl.s	.task_ok
+--- 5984,5997 ----
+  	rts
+  	; #] p0p1_checks:
+  	; #[ p0p1:
++ ;
+  ;pas de parametres formels
+! p0p1:		; - from adebug to user prog
+! ;
+! ; This rout goes from Adebug to User program
+! ;   p1p0 does the contrary.
+! ;
+! 
+  	IFNE	AMIGA
+  	bsr	test_task
+  	bpl.s	.task_ok
+***************
+*** 6208,6241 ****
+  	bsr	reactive_task
+  	ENDC	;d'AMIGA
+  	move.l	sp,internal_ssp(a6)
+  	IFNE	_68030
+  	tst.b	chip_type(a6)
+  	beq	.68000
+! 	_30
+  	move.w	sfc_buf(a6),d0
+  	dc.l	$4e7b0000		;movec	d0,sfc
+  	move.w	dfc_buf(a6),d0
+  	dc.l	$4e7b0001		;movec	d0,dfc
+  	move.l	cacr_buf(a6),d0
+! 	dc.l	$4e7b0002		;movec	d0,cacr
+  	move.l	vbr_buf(a6),d0
+  	dc.l	$4e7b0801		;movec	d0,vbr
+  	move.l	caar_buf(a6),d0
+  	dc.l	$4e7b0802		;movec	d0,caar
+  	move.l	ssp_buf(a6),d4
+  	btst	#12,d3		;bit M?
+  	bne.s	.m
+  	movec	d4,isp
+! ;	dc.l	$4e7b0804		;movec	d0,isp
+  	move.l	msp_buf(a6),d0
+  	dc.l	$4e7b0803		;movec	d0,msp
+  	bra.s	.afterm
+  
+! .m:	movec	d4,msp
+! ;	dc.l	$4e7b0803		;movec	d0,msp
+  	move.l	isp_buf(a6),d0
+  	dc.l	$4e7b0804		;movec	d0,isp
+! ;	ori.w	#$1000,sr		;set M bit
+  
+  .afterm:	_JSR	get_vbr
+  	move.l	$e0(a0),d2
+--- 6231,6290 ----
+  	bsr	reactive_task
+  	ENDC	;d'AMIGA
+  	move.l	sp,internal_ssp(a6)
++ ;	LIST
+  	IFNE	_68030
+  	tst.b	chip_type(a6)
+  	beq	.68000
+! ; bug, for template...
+! ;	cmp.b	#6,chip_type(a6)
+! ;	beq	.68060
+! 	_30	; macro = opt p=68030,p=68882...
+  	move.w	sfc_buf(a6),d0
+  	dc.l	$4e7b0000		;movec	d0,sfc
+  	move.w	dfc_buf(a6),d0
+  	dc.l	$4e7b0001		;movec	d0,dfc
+  	move.l	cacr_buf(a6),d0
+! 	movec	d0,cacr
+! 	IFEQ	_68060
+! 	nop
+! 	cpusha	dc	; flush data cache
+! 	cinva	bc	; inv inst cache & branch cache
+! 	nop
+! 	ENDC
+! ;	cmp.b	#6,chip_type(a6)
+! ;	beq	.nocacr_68060
+! 	movec	d0,cacr
+! ;	dc.l	$4e7b0002		;movec	d0,cacr
+! ;.nocacr_68060
+  	move.l	vbr_buf(a6),d0
+  	dc.l	$4e7b0801		;movec	d0,vbr
++ 
++ 	cmp.b	#6,chip_type(a6)
++ 	beq	.nocaar_68060
+  	move.l	caar_buf(a6),d0
+  	dc.l	$4e7b0802		;movec	d0,caar
++ .nocaar_68060
+  	move.l	ssp_buf(a6),d4
++ 
++ ; badly handled as the 060 the the M bit but does not have
++ ; both isp and msp registers, just ssp
++ 	cmp.b	#6,chip_type(a6)
++ 	beq	.afterm	; skips the isp/msp stuff if 060
++ 	move	d4,sp
+  	btst	#12,d3		;bit M?
+  	bne.s	.m
+  	movec	d4,isp
+! 	dc.l	$4e7b0804		;movec	d0,isp
+  	move.l	msp_buf(a6),d0
+  	dc.l	$4e7b0803		;movec	d0,msp
+  	bra.s	.afterm
+  
+! .m:
+! 	movec	d4,msp
+! 	dc.l	$4e7b0803		;movec	d0,msp
+  	move.l	isp_buf(a6),d0
+  	dc.l	$4e7b0804		;movec	d0,isp
+! 	ori.w	#$1000,sr		;set M bit
+  
+  .afterm:	_JSR	get_vbr
+  	move.l	$e0(a0),d2
+***************
+*** 6243,6265 ****
+  	move.l	a1,$e0(a0)
+  	moveq	#0,d1
+  	lea	crp_buf(a6),a0
+  	dc.w	$f010,$4c00	;pmove.q	(a0),crp
+  	addq.w	#8,a0
+  	dc.w	$f010,$4800	;pmove.q	(a0),srp
+  	addq.w	#8,a0
+  	dc.w	$f010,$4000	;pmove.l	(a0),tc
+  	addq.w	#4,a0
+! 	dc.w	$f010,$0800	;pmove.l	(a0),tt0
+  	addq.w	#4,a0
+  	dc.w	$f010,$0c00	;pmove.l	(a0),tt1
+  	addq.w	#4,a0
+  	dc.w	$f010,$6000	;pmove.w	(a0),mmusr
+  	tst.b	d1
+  	bne	.pmmu_error
+  	tst.b	fpu_type(a6)
+  	beq.s	.no_fpu
+  	addq.w	#2,a0
+  ;	trap	#0
+  	dc.w	$f210,$d0ff	;fmovem.x	(a0),fp0-fp7
+  	lea	8*3*4(a0),a0
+  ;	dc.w	$f210,$dc00	;fmovem.l	(a0),fpcr/fpsr/fpiar
+--- 6292,6329 ----
+  	move.l	a1,$e0(a0)
+  	moveq	#0,d1
+  	lea	crp_buf(a6),a0
++ 
++ 	cmp.b	#6,chip_type(a6)
++ 	beq	.skip_68060
++ 
+  	dc.w	$f010,$4c00	;pmove.q	(a0),crp
+  	addq.w	#8,a0
+  	dc.w	$f010,$4800	;pmove.q	(a0),srp
+  	addq.w	#8,a0
+  	dc.w	$f010,$4000	;pmove.l	(a0),tc
+  	addq.w	#4,a0
+! 	dc.w	$f010,$0800	;	pmove.l	(a0),tt0
+  	addq.w	#4,a0
+  	dc.w	$f010,$0c00	;pmove.l	(a0),tt1
+  	addq.w	#4,a0
+  	dc.w	$f010,$6000	;pmove.w	(a0),mmusr
++ 	bra.s	.no_060
++ .skip_68060
++ 	lea	8+8+4+4+4(a0),a0	; corrects a0, just in case
++ .no_060
++ 
+  	tst.b	d1
+  	bne	.pmmu_error
+  	tst.b	fpu_type(a6)
++ 
++ ; TODO: review FPU stack frame handling
++ ; Warning: FPU stack frame differs from 040 to 060
++ ;	bra.s	.no_fpu
++ 
+  	beq.s	.no_fpu
+  	addq.w	#2,a0
+  ;	trap	#0
++ 
+  	dc.w	$f210,$d0ff	;fmovem.x	(a0),fp0-fp7
+  	lea	8*3*4(a0),a0
+  ;	dc.w	$f210,$dc00	;fmovem.l	(a0),fpcr/fpsr/fpiar
+***************
+*** 6293,6302 ****
+  	clr.w	sf_type(a6)
+  	bra.s	.do_rte
+  .68000:
+! 	ENDIF	;68030
+  	move.l	ssp_buf(a6),sp
+  .do_rte:	move.l	pc_buf(a6),-(sp)
+! 	move.w	d3,-(sp)
+  	move.l	a7_buf(a6),a0
+  	move.l	a0,usp
+  	move.b	#1,p_number(a6)
+--- 6357,6367 ----
+  	clr.w	sf_type(a6)
+  	bra.s	.do_rte
+  .68000:
+! 	ENDC	;68030
+! 
+  	move.l	ssp_buf(a6),sp
+  .do_rte:	move.l	pc_buf(a6),-(sp)
+! 	move.w	d3,-(sp)	; d3 seems to contain SR
+  	move.l	a7_buf(a6),a0
+  	move.l	a0,usp
+  	move.b	#1,p_number(a6)
+***************
+*** 6320,6325 ****
+--- 6385,6393 ----
+  	; #] p0p1:
+  	; #[ p1p0:
+  p1p0:
++ ; From User program to Adebug
++ ;   you go here when you come from the "breakpt" routine.
++ 
+  	move.b	p_number(a6),old_p_number(a6)
+  	sf	p_number(a6)
+  	sf	halted_flag(a6)
+***************
+*** 6371,6389 ****
+--- 6439,6480 ----
+  	move.w	d0,sfc_buf(a6)
+  	dc.l	$4e7a0001		;movec	dfc,d0
+  	move.w	d0,dfc_buf(a6)
++ 	cmp.b	#6,chip_type(a6)
++ 	beq	.no_cacr
+  	dc.l	$4e7a0002		;movec	cacr,d0
++ .no_cacr
++ 	movec	cacr,d0
+  	move.l	d0,cacr_buf(a6)
++ 
++ 	cmp.b	#6,chip_type(a6)
++ 	beq	.68060
++ 
+  	move.l	#$819,d0
+  	movec	d0,cacr		;CD?,IBE,CI,EI
++ 	bra.s	.next
++ .68060
++ 	nop
++ 	_40
++ 	cpusha	dc	; push data cache
++ 	cinva	bc	; invalidates both cache & branche cache
++ 
++ .next	
+  	dc.l	$4e7a0801		;movec	vbr,d0
+  	move.l	d0,vbr_buf(a6)
++ 
++ 	cmp.b	#6,chip_type(a6)
++ 	beq.s	.skip_caar_msp_isp_060
+  	dc.l	$4e7a0802		;movec	caar,d0
+  	move.l	d0,caar_buf(a6)
+  	dc.l	$4e7a0803		;movec	msp,d0
+  	move.l	d0,msp_buf(a6)
+  	dc.l	$4e7a0804		;movec	isp,d0
+  	move.l	d0,isp_buf(a6)
++ .skip_caar_msp_isp_060
+  	lea	crp_buf(a6),a0
++ 	cmp.b	#6,chip_type(a6)
++ 	beq	.skip_68060
++ 	_30
+  	dc.w	$f010,$4e00	;pmove.q	crp,(a0)
+  	addq.w	#8,a0
+  	dc.w	$f010,$4a00	;pmove.q	srp,(a0)
+***************
+*** 6395,6400 ****
+--- 6486,6495 ----
+  	pmove.l	tt1,(a0)		;dc.w	$f010,$0e00
+  	addq.w	#4,a0
+  	dc.w	$f010,$6200	;pmove.w	mmusr,(a0)
++ 	bra.s	.no_060
++ .skip_68060
++ 	lea	8+8+4+4+4(a0),a0
++ .no_060
+  	tst.b	fpu_type(a6)
+  	beq.s	.no_fpu
+  	; detourner kekchose
+Seulement dans adb_2_14/src: adebug.bak
+Seulement dans adb_2_14/src: adebug.prg
+diff -c /home/tom/Desktop/adb_2_13/src/adebug.s adb_2_14/src/adebug.s
+*** /home/tom/Desktop/adb_2_13/src/adebug.s	2007-01-17 17:37:22.000000000 +0100
+--- adb_2_14/src/adebug.s	2008-06-23 18:22:39.734029637 +0200
+***************
+*** 152,184 ****
+  ;	 #] Text language equs:
+  ;	 #[ Internal versions equs:
+  in_line_asm	EQU	1
+! 			IFND	residant
+! residant		EQU	0
+! 			ENDC
+  residant_debug	EQU	0
+  accessoire	EQU	0
+! bridos		EQU	0
+! cartouche		EQU	0
+! mmanager		EQU	0
+  diagnostic	EQU	0
+  switching_debug	EQU	0
+  sourcedebug	EQU	1
+  turbodebug	EQU	1
+! bsddebug		EQU	0
+  latticedebug	EQU	0
+  laserdebug	EQU	0
+! stmag		EQU	0
+  amigarevue	EQU	0
+  daniel_version	EQU	0
+  amiga_avbl	EQU	0
+  atarifrance	EQU	0
+! catchgen		EQU	0
+  
+! ;	IFNE	residant|bridos|accessoire|stmag	;|cartouche
+! ;debug	EQU	0
+! ;	ELSEIF
+! ;debug	EQU	1
+! ;	ENDC
+  
+  	IFNE	english_text
+  
+--- 152,185 ----
+  ;	 #] Text language equs:
+  ;	 #[ Internal versions equs:
+  in_line_asm	EQU	1
+! 	IFND	residant
+! residant	EQU	0
+! 	ENDC
+  residant_debug	EQU	0
+  accessoire	EQU	0
+! bridos	EQU	0	; version brid‚e ? On supprimera plus tard
+! cartouche	EQU	0
+! mmanager	EQU	0
+  diagnostic	EQU	0
+  switching_debug	EQU	0
+  sourcedebug	EQU	1
+  turbodebug	EQU	1
+! bsddebug	EQU	0
+  latticedebug	EQU	0
+  laserdebug	EQU	0
+! stmag	EQU	0
+! 
+  amigarevue	EQU	0
+  daniel_version	EQU	0
+  amiga_avbl	EQU	0
+  atarifrance	EQU	0
+! catchgen	EQU	0
+  
+! 	IFNE	residant|bridos|accessoire|stmag	;|cartouche
+! debug	EQU	0
+! 	ELSEIF
+! debug	EQU	1
+! 	ENDC
+  
+  	IFNE	english_text
+  
+***************
+*** 278,283 ****
+--- 279,285 ----
+  ATARITT	EQU	1
+  ATARI	EQU	1
+  MTOS	EQU	1	;pas en meme temps que cartouche
++ 
+  AMIGA	EQU	0
+  A3000	EQU	0
+  MAC	EQU	0
+***************
+*** 299,311 ****
+  ;	 #[ Microproc equs:
+  _68000	EQU	1
+  _68010	EQU	0
+! _68020	EQU	0
+  	IFNE	ATARITT|A3000
+  _68030	EQU	1
+  	ELSEIF
+  _68030	EQU	0
+  	ENDC	; d'ATARITT
+  _68040	EQU	0
+  _CPU32	EQU	0
+  ;	IFNE	_68030
+  ;	IFEQ	A3000
+--- 301,320 ----
+  ;	 #[ Microproc equs:
+  _68000	EQU	1
+  _68010	EQU	0
+! _68020	EQU	1
+  	IFNE	ATARITT|A3000
+  _68030	EQU	1
+  	ELSEIF
+  _68030	EQU	0
+  	ENDC	; d'ATARITT
++ 	IFNE	_68030
++ _68040	EQU	1
++ _68060	EQU	1
++ 	ELSEIF
+  _68040	EQU	0
++ _68060	EQU	0
++ 	ENDC	; 68030, pour activer le support du 060
++ 
+  _CPU32	EQU	0
+  ;	IFNE	_68030
+  ;	IFEQ	A3000
+***************
+*** 626,631 ****
+--- 635,644 ----
+  	opt	p=68030,p=68882
+  	ENDM
+  
++ _40	MACRO
++ 	opt	p=68040,p=68882
++ 	ENDM
++ 
+  	ENDC	;d'ATARI|AMIGA
+  
+  	IFNE	MAC
+***************
+*** 802,807 ****
+--- 815,823 ----
+  	ENDC	;ATARIST
+  ;--------------- USER
+  	bsr	check_chip
++ 	; check CPU type.
++ 	; if Adebug compiled only for 030 and up
++ 	; and if CPU is < 030, then aborts
+  	IFEQ	_68000
+  	tst.b	chip_type(a6)
+  	bne.s	.no_bleme
+***************
+*** 850,856 ****
+  	movec	vbr,d0
+  	_00
+  	move.l	d0,initial_vbr(a6)
+! .68000:	ENDC	;_68030
+  	IFNE	AMIGA
+  	move.l	internal_am_ssp(a6),a0
+  	jsr	super_off
+--- 866,873 ----
+  	movec	vbr,d0
+  	_00
+  	move.l	d0,initial_vbr(a6)
+! .68000:
+! 	ENDC	;_68030
+  	IFNE	AMIGA
+  	move.l	internal_am_ssp(a6),a0
+  	jsr	super_off
+***************
+*** 1035,1040 ****
+--- 1052,1061 ----
+   dc.w $f4d0				; cinva
+   moveq #4,d0
+   nop
++  dc.w	%0100111001111010		; movec	pcr,d0
++  dc.w	$0808
++  moveq	#6,d0	; detects a 68060
++  nop
+  .end_CPU:
+   move.b d0,chip_type(a6)
+   moveq #0,d0
+***************
+*** 1050,1066 ****
+   moveq #2,d0
+   cmp.w #$1f38,(sp)			; 68882 Stack Frame
+   beq.s .end_FPU
+!  moveq #3,d0
+  .end_FPU:
+   dc.w $f35f				; frestore (sp)+
+  .no_FPU:
+   move.b d0,fpu_type(a6)
+   move.b d0,fpu_disassembly(a6)
+  ; moveq #0,d0
+  ; lea .68040_MMU(pc),a0
+  ; move.l a0,$2c(a2)
+  ; dc.w $f000,$2400			; pflusha (68851, 68030)
+! ; move.w Chip_type(a6),d0
+  ; bra.s .end_MMU
+  ;.68040_MMU:
+  ; lea .end_MMU(pc),a0
+--- 1071,1088 ----
+   moveq #2,d0
+   cmp.w #$1f38,(sp)			; 68882 Stack Frame
+   beq.s .end_FPU
+!  moveq #3,d0	; verify 060 stack frame (type 3 on 060)
+  .end_FPU:
+   dc.w $f35f				; frestore (sp)+
+  .no_FPU:
+   move.b d0,fpu_type(a6)
+   move.b d0,fpu_disassembly(a6)
++ ;	IFNE	_68040
+  ; moveq #0,d0
+  ; lea .68040_MMU(pc),a0
+  ; move.l a0,$2c(a2)
+  ; dc.w $f000,$2400			; pflusha (68851, 68030)
+! ; move.w chip_type(a6),d0
+  ; bra.s .end_MMU
+  ;.68040_MMU:
+  ; lea .end_MMU(pc),a0
+***************
+*** 1068,1074 ****
+  ; dc.w $f518				; pflusha (68040)
+  ; moveq #3,d0
+  ;.end_MMU:
+! ; move.w d0,MMU_type(a6)
+   move.l d3,$38(a2)
+   move.l d2,$2c(a2)
+   sub.l a2,a2
+--- 1090,1097 ----
+  ; dc.w $f518				; pflusha (68040)
+  ; moveq #3,d0
+  ;.end_MMU:
+! ; move.w d0,mmu_type(a6)
+! ;	ENDC	; _68040
+   move.l d3,$38(a2)
+   move.l d2,$2c(a2)
+   sub.l a2,a2
+Seulement dans adb_2_14/src: asm020.ttp
+diff -c /home/tom/Desktop/adb_2_13/src/atari.s adb_2_14/src/atari.s
+*** /home/tom/Desktop/adb_2_13/src/atari.s	2007-01-18 05:57:12.000000000 +0100
+--- adb_2_14/src/atari.s	2008-06-23 18:21:50.958031042 +0200
+***************
+*** 1,4 ****
+! ;
+  ; Copyright 1990-2006 Alexandre Lemaresquier, Raphael Lemoine
+  ;                     Laurent Chemla (Serial support), Daniel Verite (AmigaOS support)
+  ;
+--- 1,4 ----
+! 
+  ; Copyright 1990-2006 Alexandre Lemaresquier, Raphael Lemoine
+  ;                     Laurent Chemla (Serial support), Daniel Verite (AmigaOS support)
+  ;
+***************
+*** 115,121 ****
+  	bsr	vgetmode			;get cur mode
+  	move.w	d0,d3
+  	move.w	internal_rez(a6),-(sp)
+! 	move.w	#$5b,-(sp)
+  	trap	#14			;vgetsize
+  	addq.w	#4,sp
+  	add.l	#1024,d0
+--- 115,121 ----
+  	bsr	vgetmode			;get cur mode
+  	move.w	d0,d3
+  	move.w	internal_rez(a6),-(sp)
+! 	move.w	#$5bb,-(sp)
+  	trap	#14			;vgetsize
+  	addq.w	#4,sp
+  	add.l	#1024,d0
+***************
+*** 2425,2448 ****
+--- 2425,2463 ----
+  	move.l	d0,cacr_buf(a6)
+  	movec	vbr,d0
+  	move.l	d0,vbr_buf(a6)
++ ; UGLY HACK by frost
++ 	IFEQ	_68060
+  	movec	caar,d0
+  	move.l	d0,caar_buf(a6)
+  	movec	msp,d0
+  	move.l	d0,msp_buf(a6)
+  ;	movec	isp,d0
+  ;	move.l	d0,isp_buf(a6)
++ 	ENDC
+  	lea	crp_buf(a6),a0
++ 	IFEQ	_68060
+  	dc.w	$f010,$4e00	;pmove.d	crp,(a0)
++ 	ENDC
+  	addq.w	#8,a0
++ 	IFEQ	_68060
+  	dc.w	$f010,$4e00	;pmove.d	crp,(a0)	;pour l'instant crp->srp
++ 	ENDC
+  	addq.w	#8,a0
++ 	IFEQ	_68060
+  	dc.w	$f010,$4200	;pmove.l	tc,(a0)
++ 	ENDC
+  	addq.w	#4,a0
++ 	IFEQ	_68060
+  	dc.w	$f010,$0a00	;pmove.l	tt0,(a0)
++ 	ENDC
+  	addq.w	#4,a0
++ 	IFEQ	_68060
+  	dc.w	$f010,$0e00	;pmove.l	tt1,(a0)
++ 	ENDC
+  	addq.w	#4,a0
++ 	IFEQ	_68060
+  	dc.w	$f010,$6200	;pmove.w	mmusr,(a0)
++ 	ENDC
+  	tst.b	fpu_type(a6)
+  	beq.s	.no_fpu
+  	addq.w	#2,a0
+***************
+*** 5355,5361 ****
+  	;@ de l'expression a evaluer
+  	move.l	a5,a0
+  	move.l	a4,a1
+! 	bsr	_set_break_eval
+  
+  	;nø du break
+  	move.w	d7,BREAK_NUMBER(a5)
+--- 5370,5377 ----
+  	;@ de l'expression a evaluer
+  	move.l	a5,a0
+  	move.l	a4,a1
+! 	jsr	_set_break_eval
+! 	;bsr	_set_break_eval
+  
+  	;nø du break
+  	move.w	d7,BREAK_NUMBER(a5)
+***************
+*** 5369,5375 ****
+  	move.b	d6,d0
+  	;@ de la routine de traitement des exceptions
+  	lea	_trap_catch,a0
+! 	bsr	_build_breakpt_address
+  
+  	;d6=break vector
+  	moveq	#-1,d1
+--- 5385,5391 ----
+  	move.b	d6,d0
+  	;@ de la routine de traitement des exceptions
+  	lea	_trap_catch,a0
+! 	jsr	_build_breakpt_address
+  
+  	;d6=break vector
+  	moveq	#-1,d1
+diff -c /home/tom/Desktop/adb_2_13/src/backzip.sh adb_2_14/src/backzip.sh
+*** /home/tom/Desktop/adb_2_13/src/backzip.sh	2007-01-17 12:08:16.000000000 +0100
+--- adb_2_14/src/backzip.sh	2008-06-23 18:21:41.962032653 +0200
+***************
+*** 1,25 ****
+! #
+! # Copyright 1990-2006 Alexandre Lemaresquier, Raphael Lemoine
+! #                     Laurent Chemla (Serial support), Daniel Verite (AmigaOS support)
+! #
+! # This file is part of Adebug.
+! #
+! # Adebug is free software; you can redistribute it and/or modify
+! # it under the terms of the GNU General Public License as published by
+! # the Free Software Foundation; either version 2 of the License, or
+! # (at your option) any later version.
+! #
+! # Adebug is distributed in the hope that it will be useful,
+! # but WITHOUT ANY WARRANTY; without even the implied warranty of
+! # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+! # GNU General Public License for more details.
+! #
+! # You should have received a copy of the GNU General Public License
+! # along with Adebug; if not, write to the Free Software
+! # Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+! #
+! 
+! stzip -a adebug.zip accessor.s adebug.s adebug2.s alt_e.s atari.s databss.s
+! stzip -a adebug.zip disasmxx.s eval_128.s redraw.s residant.s srcdebug.s pcdebug.s
+! stzip -a adebug.zip mmanager.s makefile backzip.sh commands.adb
+! 
+--- 1,25 ----
+! #
+! # Copyright 1990-2006 Alexandre Lemaresquier, Raphael Lemoine
+! #                     Laurent Chemla (Serial support), Daniel Verite (AmigaOS support)
+! #
+! # This file is part of Adebug.
+! #
+! # Adebug is free software; you can redistribute it and/or modify
+! # it under the terms of the GNU General Public License as published by
+! # the Free Software Foundation; either version 2 of the License, or
+! # (at your option) any later version.
+! #
+! # Adebug is distributed in the hope that it will be useful,
+! # but WITHOUT ANY WARRANTY; without even the implied warranty of
+! # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+! # GNU General Public License for more details.
+! #
+! # You should have received a copy of the GNU General Public License
+! # along with Adebug; if not, write to the Free Software
+! # Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+! #
+! 
+! stzip -a adebug.zip accessor.s adebug.s adebug2.s alt_e.s atari.s databss.s
+! stzip -a adebug.zip disasmxx.s eval_128.s redraw.s residant.s srcdebug.s pcdebug.s
+! stzip -a adebug.zip mmanager.s makefile backzip.sh commands.adb
+! 
+diff -c /home/tom/Desktop/adb_2_13/src/databss.s adb_2_14/src/databss.s
+*** /home/tom/Desktop/adb_2_13/src/databss.s	2007-01-17 17:49:00.000000000 +0100
+--- adb_2_14/src/databss.s	2008-06-23 18:21:43.658035827 +0200
+***************
+*** 1,4 ****
+! ;
+  ; Copyright 1990-2006 Alexandre Lemaresquier, Raphael Lemoine
+  ;                     Laurent Chemla (Serial support), Daniel Verite (AmigaOS support)
+  ;
+--- 1,4 ----
+! 
+  ; Copyright 1990-2006 Alexandre Lemaresquier, Raphael Lemoine
+  ;                     Laurent Chemla (Serial support), Daniel Verite (AmigaOS support)
+  ;
+***************
+*** 75,81 ****
+  alt_e_table7:	dc.b 0,0,0,0,0,0,0,0,0,1,1,1,1,0,1,1,1,1,0,1,1,1,1,0,1,1,1,1,0,0,-1,-1,-1,-1,-1,-1,-1,-1,0
+  alt_e_table8:	dc.b 0,0,0,0,0,0,0,0,0,1,1,0,1,1,1,1,0,1,1,1,1,0,1,1,1,1,0,1,1,0,-1,-1,-1,-1,-1,-1,-1,-1,0
+  alt_e_table9:
+! 	dc.b 0,0,0,0,0,0,0,0,0,1,1,1,1,0,1,1,1,1,0,1,1,1,1,0,1,1,1,1,0,1,1,1,1,0,1,1,1,1,0,1,1,1,1,0,1,1,1,1,0,1,1,1,1,0,1,1,1,1,0,1,1,1,1,0,1,1,1,1,0,1,1,1,1,0,1,1,1,1,0,1,1,1,1,0,1,1,1,1,0,0
+  	dc.b -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+  alt_e_table10:
+  	dc.b 0,0,0,0,0,0,0,0,0,1,1,0,1,1,1,1,0,1,1,1,1,0,1,1,1,1,0,1,1,1,1,0,1,1,1,1,0,1,1,1,1,0,1,1,1,1,0,1,1,1,1,0,1,1,1,1,0,1,1,1,1,0,1,1,1,1,0,1,1,1,1,0,1,1,1,1,0,1,1,1,1,0,1,1,1,1,0,1,1,0
+--- 75,81 ----
+  alt_e_table7:	dc.b 0,0,0,0,0,0,0,0,0,1,1,1,1,0,1,1,1,1,0,1,1,1,1,0,1,1,1,1,0,0,-1,-1,-1,-1,-1,-1,-1,-1,0
+  alt_e_table8:	dc.b 0,0,0,0,0,0,0,0,0,1,1,0,1,1,1,1,0,1,1,1,1,0,1,1,1,1,0,1,1,0,-1,-1,-1,-1,-1,-1,-1,-1,0
+  alt_e_table9:
+! 	dc.b 0,0,0,0,0,0,0,0,0,1,1,1,1,0,1,1,1,1,0,1,1,1,1,0,1,1,1,1,0,1,1,,1,1,0,1,1,1,1,0,1,1,1,1,0,1,1,1,1,0,1,1,1,1,0,1,1,1,1,0,1,1,1,1,0,1,1,1,1,0,1,1,1,1,0,1,1,1,1,0,1,1,1,1,0,1,1,1,1,0,0
+  	dc.b -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+  alt_e_table10:
+  	dc.b 0,0,0,0,0,0,0,0,0,1,1,0,1,1,1,1,0,1,1,1,1,0,1,1,1,1,0,1,1,1,1,0,1,1,1,1,0,1,1,1,1,0,1,1,1,1,0,1,1,1,1,0,1,1,1,1,0,1,1,1,1,0,1,1,1,1,0,1,1,1,1,0,1,1,1,1,0,1,1,1,1,0,1,1,1,1,0,1,1,0
+***************
+*** 5564,5572 ****
+  ;  #[ Miscellaneous byte values:
+  null_string:	ds.b	1
+  chip_type:	ds.b	1
+! fpu_type:		ds.b	1
+  line_pattern:	ds.b	1
+! p_number:		ds.b	1
+  old_p_number:	ds.b	1
+  exception:	ds.b	1
+  pc_marker:	ds.b	1
+--- 5564,5574 ----
+  ;  #[ Miscellaneous byte values:
+  null_string:	ds.b	1
+  chip_type:	ds.b	1
+! fpu_type:	ds.b	1
+! ;mmu_type	ds.b	1	; added but commented by frost, required
+! 				; by check_type in adebug.s
+  line_pattern:	ds.b	1
+! p_number:	ds.b	1
+  old_p_number:	ds.b	1
+  exception:	ds.b	1
+  pc_marker:	ds.b	1
+diff -c /home/tom/Desktop/adb_2_13/src/eval_128.s adb_2_14/src/eval_128.s
+*** /home/tom/Desktop/adb_2_13/src/eval_128.s	2007-01-17 12:03:42.000000000 +0100
+--- adb_2_14/src/eval_128.s	2008-06-23 18:21:32.370036087 +0200
+***************
+*** 1,4 ****
+! ;
+  ; Copyright 1990-2006 Alexandre Lemaresquier, Raphael Lemoine
+  ;                     Laurent Chemla (Serial support), Daniel Verite (AmigaOS support)
+  ;
+--- 1,4 ----
+! 
+  ; Copyright 1990-2006 Alexandre Lemaresquier, Raphael Lemoine
+  ;                     Laurent Chemla (Serial support), Daniel Verite (AmigaOS support)
+  ;
+***************
+*** 116,122 ****
+  _FP6			equ	41
+  _FP7			equ	42
+  _FPCR			equ	43
+! _FPSR			equ	44
+  _FPIAR			equ	45
+  _W1			equ	46
+  _W2			equ	47
+--- 116,122 ----
+  _FP6			equ	41
+  _FP7			equ	42
+  _FPCR			equ	43
+! _FPSR			eqqu	44
+  _FPIAR			equ	45
+  _W1			equ	46
+  _W2			equ	47
+Seulement dans adb_2_14/src: illegal.s
+diff -c /home/tom/Desktop/adb_2_13/src/makefile adb_2_14/src/makefile
+*** /home/tom/Desktop/adb_2_13/src/makefile	2007-01-17 12:17:48.000000000 +0100
+--- adb_2_14/src/makefile	2008-06-23 18:21:24.822030383 +0200
+***************
+*** 1,35 ****
+! #
+! # Copyright 1990-2006 Alexandre Lemaresquier, Raphael Lemoine
+! #                     Laurent Chemla (Serial support), Daniel Verite (AmigaOS support)
+! #
+! # This file is part of Adebug.
+! #
+! # Adebug is free software; you can redistribute it and/or modify
+! # it under the terms of the GNU General Public License as published by
+! # the Free Software Foundation; either version 2 of the License, or
+! # (at your option) any later version.
+! #
+! # Adebug is distributed in the hope that it will be useful,
+! # but WITHOUT ANY WARRANTY; without even the implied warranty of
+! # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+! # GNU General Public License for more details.
+! #
+! # You should have received a copy of the GNU General Public License
+! # along with Adebug; if not, write to the Free Software
+! # Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+! #
+! 
+! AS = e:\bin\asm.ttp
+! SFLAGS = -v -n
+! LISTE01 = accessor.s adebug.s adebug2.s alt_e.s atari.s databss.s disasmxx.s @
+! 	eval_128.s redraw.s residant.s srcdebug.s pcdebug.s mmanager.s 
+! #.PRECIOUS: adebug.prg
+! adebug.prg:	$(LISTE01)
+! 	$(AS) $(SFLAGS) -d=debug=0 -o=adebug.prg adebug.s
+! debug:	$(LISTE01)
+! 	$(AS) $(SFLAGS) -d=debug=1 -o=debug.prg -o -x -y -o1- adebug.s
+! nodebug:	$(LISTE01)
+! 	$(AS) $(SFLAGS) -d=debug=0 -o=adebug.prg -o adebug.s
+! rdebug.prg:	$(LISTE01)
+! 	$(AS) $(SFLAGS) -d=debug=0 -d=residant=1 -o=rdebug.prg adebug.s
+! 
+--- 1,35 ----
+! #
+! # Copyright 1990-2006 Alexandre Lemaresquier, Raphael Lemoine
+! #                     Laurent Chemla (Serial support), Daniel Verite (AmigaOS support)
+! #
+! # This file is part of Adebug.
+! #
+! # Adebug is free software; you can redistribute it and/or modify
+! # it under the terms of the GNU General Public License as published by
+! # the Free Software Foundation; either version 2 of the License, or
+! # (at your option) any later version.
+! #
+! # Adebug is distributed in the hope that it will be useful,
+! # but WITHOUT ANY WARRANTY; without even the implied warranty of
+! # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+! # GNU General Public License for more details.
+! #
+! # You should have received a copy of the GNU General Public License
+! # along with Adebug; if not, write to the Free Software
+! # Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+! #
+! 
+! AS = e:\bin\asm.ttp
+! SFLAGS = -v -n
+! LISTE01 = accessor.s adebug.s adebug2.s alt_e.s atari.s databss.s disasmxx.s @
+! 	eval_128.s redraw.s residant.s srcdebug.s pcdebug.s mmanager.s 
+! #.PRECIOUS: adebug.prg
+! adebug.prg:	$(LISTE01)
+! 	$(AS) $(SFLAGS) -d=debug=0 -o=adebug.prg adebug.s
+! debug:	$(LISTE01)
+! 	$(AS) $(SFLAGS) -d=debug=1 -o=debug.prg -o -x -y -o1- adebug.s
+! nodebug:	$(LISTE01)
+! 	$(AS) $(SFLAGS) -d=debug=0 -o=adebug.prg -o adebug.s
+! rdebug.prg:	$(LISTE01)
+! 	$(AS) $(SFLAGS) -d=debug=0 -d=residant=1 -o=rdebug.prg adebug.s
+! 
+diff -c /home/tom/Desktop/adb_2_13/src/pcdebug.s adb_2_14/src/pcdebug.s
+*** /home/tom/Desktop/adb_2_13/src/pcdebug.s	2007-01-17 12:03:58.000000000 +0100
+--- adb_2_14/src/pcdebug.s	2008-06-23 18:21:23.818040381 +0200
+***************
+*** 1,4 ****
+! ;
+  ; Copyright 1990-2006 Alexandre Lemaresquier, Raphael Lemoine
+  ;                     Laurent Chemla (Serial support), Daniel Verite (AmigaOS support)
+  ;
+--- 1,4 ----
+! 
+  ; Copyright 1990-2006 Alexandre Lemaresquier, Raphael Lemoine
+  ;                     Laurent Chemla (Serial support), Daniel Verite (AmigaOS support)
+  ;
+***************
+*** 128,134 ****
+  	add.l	(a0)+,d0		;l3
+  	add.l	(a0)+,d0		;l4
+  	add.l	(a0)+,d0		;l5
+! 	add.l	(a0)+,d0		;l6
+  	add.l	(a0),d0		;names
+  	move.l	d0,tcdebug_len(a6)
+  	beq	.no_debug
+--- 128,134 ----
+  	add.l	(a0)+,d0		;l3
+  	add.l	(a0)+,d0		;l4
+  	add.l	(a0)+,d0		;l5
+! 	add.l		(a0)+,d0		;l6
+  	add.l	(a0),d0		;names
+  	move.l	d0,tcdebug_len(a6)
+  	beq	.no_debug
+Les sous-rÃ©pertoires /home/tom/Desktop/adb_2_13/src/rosrc et adb_2_14/src/rosrc sont identiques.
+diff -c /home/tom/Desktop/adb_2_13/src/srcdebug.s adb_2_14/src/srcdebug.s
+*** /home/tom/Desktop/adb_2_13/src/srcdebug.s	2007-01-17 12:04:28.000000000 +0100
+--- adb_2_14/src/srcdebug.s	2008-06-23 18:21:18.070142573 +0200
+***************
+*** 1,4 ****
+! ;
+  ; Copyright 1990-2006 Alexandre Lemaresquier, Raphael Lemoine
+  ;                     Laurent Chemla (Serial support), Daniel Verite (AmigaOS support)
+  ;
+--- 1,4 ----
+! 
+  ; Copyright 1990-2006 Alexandre Lemaresquier, Raphael Lemoine
+  ;                     Laurent Chemla (Serial support), Daniel Verite (AmigaOS support)
+  ;
+***************
+*** 187,193 ****
+  	moveq	#0,d0
+  	rts
+  ;	 #] get_next_code_addr: 
+! ;	 #[ print_source_var:
+  print_source_var:
+  	IFNE	turbodebug
+  	cmp.w	#SOURCE_PC,source_type(a6)
+--- 187,193 ----
+  	moveq	#0,d0
+  	rts
+  ;	 #] get_next_code_addr: 
+! ;	 #[  print_source_var:
+  print_source_var:
+  	IFNE	turbodebug
+  	cmp.w	#SOURCE_PC,source_type(a6)
+Seulement dans adb_2_14/src: testtom.s
