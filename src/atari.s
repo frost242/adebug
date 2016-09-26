@@ -115,7 +115,7 @@ vsetimode:
 	bsr	vgetmode			;get cur mode
 	move.w	d0,d3
 	move.w	internal_rez(a6),-(sp)
-	move.w	#$5bb,-(sp)
+	move.w	#$5b,-(sp)
 	trap	#14			;vgetsize
 	addq.w	#4,sp
 	add.l	#1024,d0
